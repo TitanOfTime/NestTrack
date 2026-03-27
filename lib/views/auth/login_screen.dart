@@ -35,11 +35,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final error = await AuthController.signIn(email, password);
-      if (error != null && mounted) {
-        _showError(error);
+      if (error != null) {
+        if (mounted) _showError(error);
+        return;
       }
-      // On success, Firebase will update auth state; navigation is
-      // handled by an auth-state listener (to be added in a later sprint).
+
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/home');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
