@@ -47,7 +47,7 @@ class HomeView extends StatelessWidget {
             ),
 
             // ── Bottom nav bar ──
-            _buildBottomNav(isHomeActive: true),
+            _buildBottomNav(context, isHomeActive: true),
           ],
         ),
       ),
@@ -177,7 +177,7 @@ class HomeView extends StatelessWidget {
   }
 
   // ── Bottom nav bar ─────────────────────────────────────────────
-  static Widget _buildBottomNav({required bool isHomeActive}) {
+  Widget _buildBottomNav(BuildContext context, {required bool isHomeActive}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Container(
@@ -189,15 +189,22 @@ class HomeView extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Icon(
-              Icons.home_rounded,
-              color: isHomeActive ? _cyan : Colors.white54,
-              size: 28,
+            IconButton(
+              icon: Icon(
+                Icons.home_rounded,
+                color: isHomeActive ? _cyan : Colors.white54,
+                size: 28,
+              ),
+              onPressed: () {}, // already on Home
             ),
-            Icon(
-              Icons.settings_outlined,
-              color: isHomeActive ? Colors.white54 : _cyan,
-              size: 26,
+            IconButton(
+              icon: Icon(
+                Icons.settings_outlined,
+                color: isHomeActive ? Colors.white54 : _cyan,
+                size: 26,
+              ),
+              onPressed: () =>
+                  Navigator.pushReplacementNamed(context, '/settings'),
             ),
           ],
         ),

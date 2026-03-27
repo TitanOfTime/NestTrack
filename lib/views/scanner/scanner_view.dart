@@ -321,7 +321,7 @@ class _ScannerViewState extends State<ScannerView> {
           style: TextStyle(fontSize: 22, fontStyle: FontStyle.italic),
           children: [
             TextSpan(
-              text: 'Nes',
+              text: 'Nest',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w300,
@@ -356,12 +356,17 @@ class _ScannerViewState extends State<ScannerView> {
                 color: Colors.white54,
                 size: 28,
               ),
-              onPressed: () => Navigator.pop(context),
+              onPressed: () =>
+                  Navigator.pushReplacementNamed(context, '/home'),
             ),
-            const Icon(
-              Icons.settings_outlined,
-              color: Colors.white54,
-              size: 26,
+            IconButton(
+              icon: const Icon(
+                Icons.settings_outlined,
+                color: Colors.white54,
+                size: 26,
+              ),
+              onPressed: () =>
+                  Navigator.pushReplacementNamed(context, '/settings'),
             ),
           ],
         ),
