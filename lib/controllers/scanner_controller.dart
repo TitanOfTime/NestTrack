@@ -23,7 +23,9 @@ class ScannerController {
   /// Must be called once (e.g. in [State.initState]) before use.
   Future<void> init() async {
     cameraController = MobileScannerController(
-      detectionSpeed: DetectionSpeed.noDuplicates,
+      // We handle throttling manually via [isProcessing] to prevent the 
+      // scanner from ignoring same-barcode re-scans permanently.
+      detectionSpeed: DetectionSpeed.normal,
     );
     await _loadProductDb();
   }
@@ -100,14 +102,31 @@ class ScannerController {
       onStateChanged();
     } else {
       // ── Success state ──
-      isProcessing = false;
+      // Note: Do NOT set isProcessing = false here! 
+      // Keep it true during the route transition to prevent double-pushes.
       onStateChanged();
+
+      // Explicitly stop the camera before leaving the view to free hardware
+      await cameraController.stop();
 
       await Navigator.pushNamed(
         context,
         '/report',
         arguments: {'sku': code, ...product},
       );
+
+      // ── Returned from ReportView (e.g. user pressed Re-Scan) ──
+      if (!context.mounted) return;
+      
+      // Explicitly restart the camera safely
+      await cameraController.start();
+      
+      // Minimal delay to prevent instant accidental re-scans
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      if (!context.mounted) return;
+      isProcessing = false;
+      onStateChanged();
     }
   }
 }

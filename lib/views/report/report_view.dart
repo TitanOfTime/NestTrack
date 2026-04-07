@@ -355,7 +355,7 @@ class _ReportViewState extends State<ReportView> {
       children: [
         // Re-Scan
         ElevatedButton(
-          onPressed: () => Navigator.pushReplacementNamed(context, '/scanner'),
+          onPressed: () => Navigator.pop(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.orange,
             foregroundColor: Colors.white,
