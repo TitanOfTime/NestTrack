@@ -90,11 +90,11 @@ class ReportController {
 
   // ── Firebase Submission ────────────────────────────────────────
 
-  /// Uploads image (if any) to Firebase Storage, then writes a
-  /// Firestore document to `damage_reports`.
+  /// Validates form, dual-writes to `damage_reports` and `replenishment_queue`,
+  /// and returns a triage action string.
   ///
-  /// Guards every UI call with `if (!context.mounted) return;`.
-  Future<void> submitReport({
+  /// Guards every UI call with `if (!context.mounted) return null;`.
+  Future<String?> submitReport({
     required Map<String, dynamic> productData,
     required BuildContext context,
     required VoidCallback onLoadingChanged,
@@ -108,7 +108,7 @@ class ReportController {
         context,
         'Please enter the number of damaged and unusable units.',
       );
-      return;
+      return null;
     }
 
     // 2. Non-numeric unit values
@@ -116,7 +116,7 @@ class ReportController {
     final unusableInt = int.tryParse(unusableUnitsController.text.trim());
     if (damagedInt == null || unusableInt == null) {
       _showErrorSnackBar(context, 'Unit counts must be valid numbers.');
-      return;
+      return null;
     }
 
     // 3. Empty description
@@ -125,7 +125,7 @@ class ReportController {
         context,
         'Please provide a brief description of the damage.',
       );
-      return;
+      return null;
     }
 
     // ── Show loading overlay ──
@@ -142,42 +142,62 @@ class ReportController {
         imageUrl = await ref.getDownloadURL();
       }
 
-      // ── Write Firestore document ──
+      final rawPrice = productData['unitPrice'];
+      int unitPrice = 0;
+      if (rawPrice is num) {
+        unitPrice = rawPrice.toInt();
+      } else if (rawPrice is String) {
+        unitPrice = int.tryParse(rawPrice) ?? 0;
+      }
+
+      final hazardType = (productData['hazardType']?.toString() ?? 'dry').toLowerCase().trim();
+      final sku = productData['sku'] ?? '';
+      final productName = productData['name'] ?? '';
+
+      // ── The Primary Write: Damage Report ──
       await FirebaseFirestore.instance.collection('damage_reports').add({
-        'sku': productData['sku'] ?? '',
-        'productName': productData['name'] ?? '',
+        'sku': sku,
+        'productName': productName,
         'isDamaged': isDamaged,
-        'damagedUnits': damagedUnitsController.text.trim(),
-        'unusableUnits': unusableUnitsController.text.trim(),
+        'damagedUnits': damagedInt,
+        'unusableUnits': unusableInt,
         'description': descriptionController.text.trim(),
         'imageUrl': imageUrl,
+        'unitPrice': unitPrice,
+        'hazardType': hazardType,
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      if (!context.mounted) return;
+      // ── The Auto-Replenishment Write ──
+      await FirebaseFirestore.instance.collection('replenishment_queue').add({
+        'sku': sku,
+        'productName': productName,
+        'damagedUnits': damagedInt,
+        'status': 'Auto-Replacement Approved',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      if (!context.mounted) return null;
 
       // ── Dismiss loading ──
       onLoadingChanged();
 
-      // ── Success: green SnackBar then pop to Home ──
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Report submitted successfully!',
-            style: TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-
-      Navigator.popUntil(context, ModalRoute.withName('/home'));
+      // ── The Triage Engine (Routing Logic) ──
+      // 3. Routing condition logic
+      if (unitPrice < 1500) {
+        return 'DISPOSE';
+      } else if (hazardType == 'glass') {
+        return 'HAZARD_GLASS';
+      } else if (hazardType == 'liquid' || hazardType == 'perishable') {
+        return 'HAZARD_LIQUID';
+      } else {
+        return 'RETURN_STANDARD';
+      }
     } catch (e) {
-      if (!context.mounted) return;
+      if (!context.mounted) return null;
       onLoadingChanged(); // hide loading
       _showErrorSnackBar(context, 'Submission failed: $e');
+      return null;
     }
   }
 

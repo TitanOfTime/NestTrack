@@ -349,6 +349,11 @@ class _ReportViewState extends State<ReportView> {
   }
 
   // ── Action buttons ────────────────────────────────────────────
+  bool get _isSubmitLocked {
+    final unitPrice = (_productData['unitPrice'] as num?)?.toInt() ?? 0;
+    return unitPrice > 10000 && _controller.imageFile == null;
+  }
+
   Widget _buildActionButtons() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -370,24 +375,96 @@ class _ReportViewState extends State<ReportView> {
 
         // Submit Report
         ElevatedButton(
-          onPressed: _isLoading
+          onPressed: _isLoading || _isSubmitLocked
               ? null
-              : () => _controller.submitReport(
+              : () async {
+                  final triageAction = await _controller.submitReport(
                     productData: _productData,
                     context: context,
                     onLoadingChanged: _toggleLoading,
-                  ),
+                  );
+                  if (triageAction != null && context.mounted) {
+                    _showTriageScreen(triageAction);
+                  }
+                },
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
+            backgroundColor: _isSubmitLocked ? Colors.grey : Colors.green,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24)),
           ),
-          child: const Text('Submit Report',
-              style: TextStyle(fontWeight: FontWeight.bold)),
+          child: Text(
+              _isSubmitLocked ? 'Photo Required' : 'Submit Report',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
         ),
       ],
+    );
+  }
+
+  // ── Triage Screen ───────────────────────────────────────────────
+  void _showTriageScreen(String action) {
+    Color bgColor;
+    String displayText;
+    
+    switch (action) {
+      case 'DISPOSE':
+        bgColor = Colors.green.shade800;
+        displayText = 'DISPOSE:\nMove Item to Scrap Bin';
+        break;
+      case 'HAZARD_GLASS':
+        bgColor = Colors.red.shade800;
+        displayText = 'HAZARD:\nDeposit in Shatter Bin 4';
+        break;
+      case 'HAZARD_LIQUID':
+        bgColor = Colors.blue.shade800;
+        displayText = 'HAZARD:\nMove to Spill Station';
+        break;
+      case 'RETURN_STANDARD':
+      default:
+        bgColor = Colors.orange.shade800;
+        displayText = 'STANDARD DAMAGE:\nPlace on Return Pallet 12';
+        break;
+    }
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: bgColor,
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) {
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  displayText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 48,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 60),
+                ElevatedButton(
+                  onPressed: () => Navigator.popUntil(context, ModalRoute.withName('/home')),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  child: const Text('DONE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -405,16 +482,12 @@ class _ReportViewState extends State<ReportView> {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             IconButton(
-              icon: const Icon(Icons.home_rounded,
-                  color: Colors.white54, size: 28),
-              onPressed: () =>
-                  Navigator.pushReplacementNamed(context, '/home'),
+              icon: const Icon(Icons.home_rounded, color: Colors.white54, size: 28),
+              onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
             ),
             IconButton(
-              icon: const Icon(Icons.settings_outlined,
-                  color: Colors.white54, size: 26),
-              onPressed: () =>
-                  Navigator.pushReplacementNamed(context, '/settings'),
+              icon: const Icon(Icons.settings_outlined, color: Colors.white54, size: 26),
+              onPressed: () => Navigator.pushReplacementNamed(context, '/settings'),
             ),
           ],
         ),
@@ -422,3 +495,4 @@ class _ReportViewState extends State<ReportView> {
     );
   }
 }
+
