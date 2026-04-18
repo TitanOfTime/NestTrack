@@ -204,7 +204,7 @@ class HomeView extends StatelessWidget {
                 size: 26,
               ),
               onPressed: () =>
-                  Navigator.pushReplacementNamed(context, '/settings'),
+                  Navigator.pushNamed(context, '/settings'),
             ),
           ],
         ),

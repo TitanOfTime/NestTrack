@@ -16,9 +16,16 @@ class ReportController {
   bool isListening = false;
   String _textBeforeRecording = '';
 
-  final TextEditingController damagedUnitsController = TextEditingController();
+  // ── Dropdown state ────────────────────────────────────────────
+  String? selectedCause;
+  String? selectedZone;
+
+  final List<String> causes = ['Transit', 'Handling', 'Environmental', 'Other'];
+  final List<String> zones  = ['Loading Dock A', 'Aisle 4', 'Cold Storage', 'Quarantine'];
+
+  final TextEditingController damagedUnitsController  = TextEditingController();
   final TextEditingController unusableUnitsController = TextEditingController();
-  final TextEditingController descriptionController = TextEditingController();
+  final TextEditingController descriptionController   = TextEditingController();
 
   // ── Private singletons ────────────────────────────────────────
   final _picker = ImagePicker();
@@ -128,6 +135,15 @@ class ReportController {
       return null;
     }
 
+    // 4. Dropdown fields — must both be selected
+    if (selectedCause == null || selectedZone == null) {
+      _showErrorSnackBar(
+        context,
+        'Please select a damage cause and warehouse zone.',
+      );
+      return null;
+    }
+
     // ── Show loading overlay ──
     onLoadingChanged();
 
@@ -136,12 +152,14 @@ class ReportController {
 
       // ── Upload image only if one was captured ──
       if (imageFile != null) {
-        final fileName = 'damage_images/${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final fileName =
+            'damage_images/${DateTime.now().millisecondsSinceEpoch}.jpg';
         final ref = FirebaseStorage.instance.ref(fileName);
         await ref.putFile(imageFile!);
         imageUrl = await ref.getDownloadURL();
       }
 
+      // ── Safely parse unitPrice (handles int, double, or String from Firestore)
       final rawPrice = productData['unitPrice'];
       int unitPrice = 0;
       if (rawPrice is num) {
@@ -150,31 +168,35 @@ class ReportController {
         unitPrice = int.tryParse(rawPrice) ?? 0;
       }
 
-      final hazardType = (productData['hazardType']?.toString() ?? 'dry').toLowerCase().trim();
-      final sku = productData['sku'] ?? '';
+      // ── Sanitize hazardType to lowercase for reliable triage matching ──
+      final hazardType =
+          (productData['hazardType']?.toString() ?? 'dry').toLowerCase().trim();
+      final sku         = productData['sku'] ?? '';
       final productName = productData['name'] ?? '';
 
       // ── The Primary Write: Damage Report ──
       await FirebaseFirestore.instance.collection('damage_reports').add({
-        'sku': sku,
-        'productName': productName,
-        'isDamaged': isDamaged,
+        'sku':          sku,
+        'productName':  productName,
+        'isDamaged':    isDamaged,
         'damagedUnits': damagedInt,
         'unusableUnits': unusableInt,
-        'description': descriptionController.text.trim(),
-        'imageUrl': imageUrl,
-        'unitPrice': unitPrice,
-        'hazardType': hazardType,
-        'timestamp': FieldValue.serverTimestamp(),
+        'description':  descriptionController.text.trim(),
+        'imageUrl':     imageUrl,
+        'unitPrice':    unitPrice,
+        'hazardType':   hazardType,
+        'damageCause':  selectedCause,
+        'warehouseZone': selectedZone,
+        'timestamp':    FieldValue.serverTimestamp(),
       });
 
       // ── The Auto-Replenishment Write ──
       await FirebaseFirestore.instance.collection('replenishment_queue').add({
-        'sku': sku,
-        'productName': productName,
+        'sku':          sku,
+        'productName':  productName,
         'damagedUnits': damagedInt,
-        'status': 'Auto-Replacement Approved',
-        'timestamp': FieldValue.serverTimestamp(),
+        'status':       'Auto-Replacement Approved',
+        'timestamp':    FieldValue.serverTimestamp(),
       });
 
       if (!context.mounted) return null;
@@ -183,7 +205,6 @@ class ReportController {
       onLoadingChanged();
 
       // ── The Triage Engine (Routing Logic) ──
-      // 3. Routing condition logic
       if (unitPrice < 1500) {
         return 'DISPOSE';
       } else if (hazardType == 'glass') {
@@ -212,7 +233,8 @@ class ReportController {
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
