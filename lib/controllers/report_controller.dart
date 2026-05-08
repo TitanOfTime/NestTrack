@@ -4,11 +4,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Controller for the Damage Report feature.
 ///
 /// Manages all form state, image picking, voice recording,
-/// and the Firebase Storage + Firestore submission flow.
+/// audio capture, and the Firebase Storage + Firestore submission flow.
 class ReportController {
   // ── Form state ────────────────────────────────────────────────
   bool isDamaged = true;
@@ -22,6 +24,11 @@ class ReportController {
 
   final List<String> causes = ['Transit', 'Handling', 'Environmental', 'Other'];
   final List<String> zones  = ['Loading Dock A', 'Aisle 4', 'Cold Storage', 'Quarantine'];
+
+  // ── Audio recording state ─────────────────────────────────────
+  bool isRecording = false;
+  String? _audioFilePath;
+  final AudioRecorder _recorder = AudioRecorder();
 
   final TextEditingController damagedUnitsController  = TextEditingController();
   final TextEditingController unusableUnitsController = TextEditingController();
@@ -45,7 +52,7 @@ class ReportController {
     return imageFile;
   }
 
-  // ── Voice Recording ───────────────────────────────────────────
+  // ── Speech-to-Text ────────────────────────────────────────────
 
   /// Toggles the speech-to-text session.
   /// [onStateChanged] lets the View rebuild when [isListening] flips.
@@ -93,6 +100,56 @@ class ReportController {
         }
       },
     );
+  }
+
+  // ── Audio Recording (.m4a) ────────────────────────────────────
+
+  /// Toggles start/stop of the .m4a audio recorder.
+  /// [onStateChanged] lets the View rebuild when [isRecording] flips.
+  Future<void> toggleRecording(VoidCallback onStateChanged) async {
+    if (isRecording) {
+      // ── Stop ──
+      final path = await _recorder.stop();
+      isRecording = false;
+      _audioFilePath = path;
+      onStateChanged();
+      return;
+    }
+
+    // ── Start ──
+    if (await _recorder.hasPermission()) {
+      final dir = await getTemporaryDirectory();
+      final filePath =
+          '${dir.path}/voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      await _recorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc),
+        path: filePath,
+      );
+      isRecording = true;
+      onStateChanged();
+    }
+  }
+
+  /// Uploads the recorded .m4a file to Firebase Storage.
+  /// Sets MIME type explicitly so web dashboards can stream it.
+  Future<String?> _uploadAudioToStorage() async {
+    if (_audioFilePath == null) return null;
+    final file = File(_audioFilePath!);
+    if (!file.existsSync()) return null;
+
+    final fileName =
+        'voice_notes/${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final ref = FirebaseStorage.instance.ref(fileName);
+
+    // Explicitly set MIME type so the Next.js web dashboard
+    // streams the file in an HTML5 <audio> player instead
+    // of forcing a raw binary download.
+    await ref.putFile(
+      file,
+      SettableMetadata(contentType: 'audio/m4a'),
+    );
+    return ref.getDownloadURL();
   }
 
   // ── Firebase Submission ────────────────────────────────────────
@@ -159,6 +216,9 @@ class ReportController {
         imageUrl = await ref.getDownloadURL();
       }
 
+      // ── Upload audio if recorded ──
+      final audioUrl = await _uploadAudioToStorage();
+
       // ── Safely parse unitPrice (handles int, double, or String from Firestore)
       final rawPrice = productData['unitPrice'];
       int unitPrice = 0;
@@ -168,6 +228,9 @@ class ReportController {
         unitPrice = int.tryParse(rawPrice) ?? 0;
       }
 
+      // ── Incident Loss Calculation ──
+      final incidentLoss = unitPrice * unusableInt;
+
       // ── Sanitize hazardType to lowercase for reliable triage matching ──
       final hazardType =
           (productData['hazardType']?.toString() ?? 'dry').toLowerCase().trim();
@@ -176,18 +239,20 @@ class ReportController {
 
       // ── The Primary Write: Damage Report ──
       await FirebaseFirestore.instance.collection('damage_reports').add({
-        'sku':          sku,
-        'productName':  productName,
-        'isDamaged':    isDamaged,
-        'damagedUnits': damagedInt,
+        'sku':           sku,
+        'productName':   productName,
+        'isDamaged':     isDamaged,
+        'damagedUnits':  damagedInt,
         'unusableUnits': unusableInt,
-        'description':  descriptionController.text.trim(),
-        'imageUrl':     imageUrl,
-        'unitPrice':    unitPrice,
-        'hazardType':   hazardType,
-        'damageCause':  selectedCause,
+        'description':   descriptionController.text.trim(),
+        'imageUrl':      imageUrl,
+        'audioUrl':      audioUrl,
+        'incidentLoss':  incidentLoss,
+        'unitPrice':     unitPrice,
+        'hazardType':    hazardType,
+        'damageCause':   selectedCause,
         'warehouseZone': selectedZone,
-        'timestamp':    FieldValue.serverTimestamp(),
+        'timestamp':     FieldValue.serverTimestamp(),
       });
 
       // ── The Auto-Replenishment Write ──
@@ -244,5 +309,6 @@ class ReportController {
     damagedUnitsController.dispose();
     unusableUnitsController.dispose();
     descriptionController.dispose();
+    _recorder.dispose();
   }
 }

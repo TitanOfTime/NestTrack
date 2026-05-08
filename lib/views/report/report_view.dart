@@ -465,7 +465,7 @@ class _ReportViewState extends State<ReportView> {
     );
   }
 
-  // ── Description + mic ────────────────────────────────────────
+  // ── Description + dual mic/recorder buttons ───────────────────
   Widget _buildDescriptionField() {
     return Stack(
       children: [
@@ -478,7 +478,7 @@ class _ReportViewState extends State<ReportView> {
             hintStyle: const TextStyle(color: Colors.white38),
             filled: true,
             fillColor: _cardBg,
-            contentPadding: const EdgeInsets.fromLTRB(12, 12, 52, 12),
+            contentPadding: const EdgeInsets.fromLTRB(12, 12, 52, 52),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -486,9 +486,9 @@ class _ReportViewState extends State<ReportView> {
           ),
         ),
 
-        // Mic button – bottom-right inside the field
+        // Speech-to-text button — bottom-left
         Positioned(
-          right: 10,
+          left: 10,
           bottom: 10,
           child: GestureDetector(
             onTap: () => _controller.toggleVoiceRecording(_rebuild),
@@ -505,6 +505,33 @@ class _ReportViewState extends State<ReportView> {
               child: Icon(
                 _controller.isListening ? Icons.mic : Icons.mic_none,
                 color: Colors.black,
+                size: 20,
+              ),
+            ),
+          ),
+        ),
+
+        // Audio recorder button — bottom-right
+        Positioned(
+          right: 10,
+          bottom: 10,
+          child: GestureDetector(
+            onTap: () => _controller.toggleRecording(_rebuild),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _controller.isRecording
+                    ? Colors.redAccent
+                    : Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _controller.isRecording
+                    ? Icons.stop
+                    : Icons.fiber_manual_record,
+                color: _controller.isRecording ? Colors.white : Colors.red,
                 size: 20,
               ),
             ),
