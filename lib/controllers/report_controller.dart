@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Controller for the Damage Report feature.
 ///
@@ -152,6 +153,64 @@ class ReportController {
     return ref.getDownloadURL();
   }
 
+  // ── Behavioral Personalization ─────────────────────────────────
+
+  /// Reads the cached default zone and updates the selectedZone state.
+  Future<void> initializePersonalization(VoidCallback onStateChanged) async {
+    final prefs = await SharedPreferences.getInstance();
+    final defaultZone = prefs.getString('defaultZone');
+    
+    // Ensure the cached zone is still a valid option in the list
+    if (defaultZone != null && zones.contains(defaultZone)) {
+      selectedZone = defaultZone;
+      onStateChanged();
+    }
+  }
+
+  /// Implements the "Streak Rule": tracks a candidateZone and promotes it to defaultZone
+  /// if it is selected 3 times in a row.
+  Future<void> _learnWorkerHabits(String justSelectedZone) async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentDefault = prefs.getString('defaultZone');
+
+    if (currentDefault == null) {
+      // First time saving a zone
+      await prefs.setString('defaultZone', justSelectedZone);
+      await prefs.remove('candidateZone');
+      await prefs.remove('reassignmentStreak');
+      return;
+    }
+
+    if (justSelectedZone == currentDefault) {
+      // Matches default zone: Reset streak and candidate tracking
+      await prefs.remove('candidateZone');
+      await prefs.remove('reassignmentStreak');
+    } else {
+      // Mismatch: Evaluate candidate zone
+      final currentCandidate = prefs.getString('candidateZone');
+      
+      if (justSelectedZone == currentCandidate) {
+        // Repeated the same candidate zone
+        int currentStreak = prefs.getInt('reassignmentStreak') ?? 1;
+        currentStreak++;
+
+        if (currentStreak >= 3) {
+          // Promote candidate to default after 3 consecutive selections
+          await prefs.setString('defaultZone', justSelectedZone);
+          await prefs.remove('candidateZone');
+          await prefs.remove('reassignmentStreak');
+        } else {
+          // Increment streak
+          await prefs.setInt('reassignmentStreak', currentStreak);
+        }
+      } else {
+        // A new candidate zone entirely
+        await prefs.setString('candidateZone', justSelectedZone);
+        await prefs.setInt('reassignmentStreak', 1);
+      }
+    }
+  }
+
   // ── Firebase Submission ────────────────────────────────────────
 
   /// Validates form, dual-writes to `damage_reports` and `replenishment_queue`,
@@ -263,6 +322,11 @@ class ReportController {
         'status':       'Auto-Replacement Approved',
         'timestamp':    FieldValue.serverTimestamp(),
       });
+
+      // ── Behavioral Personalization: Learn Zone Habits ──
+      if (selectedZone != null) {
+        await _learnWorkerHabits(selectedZone!);
+      }
 
       if (!context.mounted) return null;
 

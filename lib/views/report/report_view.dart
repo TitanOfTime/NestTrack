@@ -24,6 +24,15 @@ class _ReportViewState extends State<ReportView> {
   bool _argsExtracted = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Fetch cached zone memory and rebuild if a default is found
+    _controller.initializePersonalization(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_argsExtracted) {
