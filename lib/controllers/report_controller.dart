@@ -315,13 +315,15 @@ class ReportController {
       });
 
       // ── The Auto-Replenishment Write ──
-      await FirebaseFirestore.instance.collection('replenishment_queue').add({
-        'sku':          sku,
-        'productName':  productName,
-        'damagedUnits': damagedInt,
-        'status':       'Auto-Replacement Approved',
-        'timestamp':    FieldValue.serverTimestamp(),
-      });
+      if (unitPrice < 10000) {
+        await FirebaseFirestore.instance.collection('replenishment_queue').add({
+          'sku':          sku,
+          'productName':  productName,
+          'damagedUnits': damagedInt,
+          'status':       'Auto-Replacement Approved',
+          'timestamp':    FieldValue.serverTimestamp(),
+        });
+      }
 
       // ── Behavioral Personalization: Learn Zone Habits ──
       if (selectedZone != null) {
